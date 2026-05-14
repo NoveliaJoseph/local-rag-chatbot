@@ -76,34 +76,23 @@ def initialize_rag(pdf_path, session_id):
     faiss_path = f"{vectorstore_dir}/faiss.index"
     chunks_path = f"{vectorstore_dir}/chunks.json"
 
-    if os.path.exists(faiss_path):
+    print("Creating new vectorstore...")
 
-        print("Loading existing vectorstore...")
+    pdf_text = extract_pdf_text(pdf_path)
 
-        index = faiss.read_index(faiss_path)
+    if not pdf_text.strip():
+        raise ValueError("No readable text found in PDF. It might be scanned or empty.")
 
-        with open(chunks_path, "r", encoding="utf-8") as file:
-            chunks = json.load(file)
+    chunks = create_chunks(pdf_text)
 
-    else:
+    embeddings = create_embeddings(chunks)
 
-        print("Creating new vectorstore...")
+    index = store_in_faiss(embeddings)
 
-        pdf_text = extract_pdf_text(pdf_path)
+    faiss.write_index(index, faiss_path)
 
-        if not pdf_text.strip():
-            raise ValueError("No readable text found in PDF. It might be scanned or empty.")
-
-        chunks = create_chunks(pdf_text)
-
-        embeddings = create_embeddings(chunks)
-
-        index = store_in_faiss(embeddings)
-
-        faiss.write_index(index, faiss_path)
-
-        with open(chunks_path, "w", encoding="utf-8") as file:
-            json.dump(chunks, file)
+    with open(chunks_path, "w", encoding="utf-8") as file:
+        json.dump(chunks, file)
 
     return index, chunks
 
@@ -112,7 +101,7 @@ def search_query(question, model, index, chunks):
     question_embedding = model.encode([question])
     distances, indices = index.search(
         np.array(question_embedding).astype("float32"),
-        k=5
+        k=2
     )
     retrieved_chunks = []
     for i in range(len(indices[0])):
@@ -152,7 +141,7 @@ USER QUESTION:
 FINAL ANSWER:
 """
     response = ollama.chat(
-        model="mistral",
+        model="phi3:latest",
         messages=[{"role": "user", "content": prompt}]
     )
     return response["message"]["content"]
